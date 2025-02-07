@@ -31,4 +31,10 @@ This project runs the classic DOOM game inside a Google Sheets document using Go
 Instead of setting it up manually, you can try a pre-configured version here:
 [DOOM on Google Sheets (Live)](https://docs.google.com/spreadsheets/d/11wws-heLAuix_GTvukOGRPmn4SMu6ZYYmkTZe4QXKXs/edit?usp=sharing)
 
+## Demo Video
+Watch a demonstration of DOOM running on Google Sheets:
+
+[![DOOM on Google Sheets](https://img.youtube.com/vi/sDCdw9NveTg/0.jpg)](https://www.youtube.com/watch?v=sDCdw9NveTg)
+
 Enjoy retro gaming in an unusual place!
+
