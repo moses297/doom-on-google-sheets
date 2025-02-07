@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en-us">
+  <head>
+    <base target="_top">
+    <meta charset="utf-8">
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <title>DOOM</title>
+    <style>
+      .dosbox-container {
+        width: 320px;
+        height: 200px;
+        margin: 0 auto;
+      }
+      canvas {
+        display: none;
+      }
+      #status {
+        margin: 10px;
+        font-family: monospace;
+      }
+    </style>
+    <script>
+      let frameCount = 0;
+      let isUpdating = false;
+      let previousFrame = null;
+      const FRAME_SKIP = 16; // Process every frame
+      const DISPLAY_WIDTH = 120; // Reduced resolution
+      const DISPLAY_HEIGHT = 80; // Reduced resolution
+      const CHANGE_THRESHOLD = 30;
+
+      // Queue to hold frame updates
+      const frameQueue = [];
+
+      window.addEventListener('load', function() {
+        const script = document.createElement('script');
+        script.src = 'https://js-dos.com/6.22/current/js-dos.js';
+        script.onload = initDoom;
+        document.head.appendChild(script);
+      });
+
+      function initDoom() {
+        const canvas = document.createElement('canvas');
+        const hiddenCanvas = document.createElement('canvas');
+        hiddenCanvas.width = DISPLAY_WIDTH;
+        hiddenCanvas.height = DISPLAY_HEIGHT;
+        const ctx = hiddenCanvas.getContext('2d');
+        
+        document.getElementById('dosbox').appendChild(canvas);
+        
+        Dos(canvas, {
+          wdosboxUrl: "https://js-dos.com/6.22/current/wdosbox.js"
+        }).ready((fs, main) => {
+          fs.extract("https://js-dos.com/cdn/upload/DOOM-@evilution.zip")
+            .then(() => {
+              main(["-c", "mount c .", "-c", "c:", "-c", "cd DOOM", "-c", "DOOM.EXE"])
+                .then((ci) => {
+                  window.dosbox = ci;
+                  requestAnimationFrame(captureFrame);
+                })
+                .catch((error) => {
+                  console.error("DOSBox error:", error);
+                });
+            })
+            .catch((error) => {
+              console.error("Extraction error:", error);
+            });
+        });
+
+        function colorDifference(color1, color2) {
+          return Math.abs(color1[0] - color2[0]) +
+                 Math.abs(color1[1] - color2[1]) +
+                 Math.abs(color1[2] - color2[2]);
+        }
+
+        function captureFrame() {
+          frameCount++;
+          
+          if (frameCount % FRAME_SKIP === 0) {
+            ctx.drawImage(canvas, 0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT);
+            
+            const imageData = ctx.getImageData(0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT);
+            const pixels = imageData.data;
+            
+            const frameData = [];
+            const changedCells = [];
+            
+            for (let y = 0; y < DISPLAY_HEIGHT; y++) {
+              const row = [];
+              for (let x = 0; x < DISPLAY_WIDTH; x++) {
+                const i = (y * DISPLAY_WIDTH + x) * 4;
+                const color = [
+                  pixels[i],     // R
+                  pixels[i + 1], // G
+                  pixels[i + 2]  // B
+                ];
+                row.push(color);
+                
+                if (previousFrame) {
+                  const prevColor = previousFrame[y][x];
+                  if (colorDifference(color, prevColor) > CHANGE_THRESHOLD) {
+                    changedCells.push({ row: y, col: x, color: color });
+                  }
+                } else {
+                  changedCells.push({ row: y, col: x, color: color });
+                }
+              }
+              frameData.push(row);
+            }
+            
+            previousFrame = frameData;
+            
+            if (changedCells.length > 0) {
+              // Add the frame to the queue
+              frameQueue.push({ changedCells, frameCount });
+
+              // Process the queue if not already processing
+              if (!isUpdating) {
+                processQueue();
+              }
+            }
+          }
+          
+          requestAnimationFrame(captureFrame);
+        }
+
+        function processQueue() {
+          if (frameQueue.length > 0) {
+            isUpdating = true;
+            const { changedCells, frameCount } = frameQueue.shift();
+
+            google.script.run
+              .withSuccessHandler(() => {
+                document.getElementById('status').textContent = 
+                  `Frame ${frameCount} rendered (${changedCells.length} cells updated)`;
+                isUpdating = false;
+                processQueue(); // Process the next frame in the queue
+              })
+              .withFailureHandler(error => {
+                console.error('Failed to update cells:', error);
+                isUpdating = false;
+                processQueue(); // Retry the next frame in the queue
+              })
+              .updateCells(changedCells);
+          }
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <div id="dosbox"></div>
+    <div id="status">Initializing DOOM renderer...</div>
+  </body>
+</html>
